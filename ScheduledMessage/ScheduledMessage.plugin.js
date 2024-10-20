@@ -1,6 +1,6 @@
 /**
  * @name ScheduledMessage
- * @description Plugin to schedule message sending with a custom modal.
+ * @description Plugin to schedule message sending.
  * @version 1.0.0
  * @author Alexvo
  * @authorId 265931236885790721
@@ -17,7 +17,7 @@ var manifest = {
     "name": "ScheduledMessage",
     "version": "1.0.0",
     "author": "Alexvo",
-    "description": "Plugin to schedule message sending with a custom modal."
+    "description": "Plugin to schedule message sending."
 };
 
 const {
