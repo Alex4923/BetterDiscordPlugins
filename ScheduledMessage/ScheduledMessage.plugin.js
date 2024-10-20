@@ -4,8 +4,9 @@
  * @version 1.0.0
  * @author Alexvo
  * @authorId 265931236885790721
- * @source github.com/Alexvo/ScheduledMessage
+ * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
  * @donate https://paypal.me/alex4923
+ * @website https://www.alexvo2709.com/
 
  */
 
