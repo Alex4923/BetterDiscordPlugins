@@ -1,13 +1,12 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 1.0.0
+ * @version 1.1.0
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
  * @donate https://paypal.me/alex4923
  * @website https://www.alexvo2709.com/
-
  */
 
 'use strict';
@@ -16,9 +15,10 @@ const React = BdApi.React;
 
 var manifest = {
     "name": "ScheduledMessage",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "author": "Alexvo",
-    "description": "Plugin to schedule message sending."
+    "description": "Plugin to schedule message sending.",
+    "authorID": "265931236885790721"
 };
 
 const {
@@ -47,6 +47,27 @@ var Styles = {
     }
 };
 
+const ScheduledMessagesStore = {
+    messages: new Map(),
+    checkInterval: null,
+    
+    addMessage(id, channelId, message, scheduledTime) {
+        this.messages.set(id, {
+            channelId,
+            message,
+            scheduledTime
+        });
+    },
+    
+    removeMessage(id) {
+        this.messages.delete(id);
+    },
+    
+    clearAll() {
+        this.messages.clear();
+    }
+};
+
 class CustomModal extends React.Component {
     constructor(props) {
         super(props);
@@ -54,14 +75,14 @@ class CustomModal extends React.Component {
             message: "",
             date: "",
             time: "",
-            isVisible: false  
+            isVisible: false
         };
     }
 
     componentDidMount() {
         setTimeout(() => {
             this.setState({ isVisible: true });
-        }, 10);  
+        }, 10);
     }
 
     handleInputChange = (event) => {
@@ -75,11 +96,7 @@ class CustomModal extends React.Component {
             if (this.props.onClose) {
                 this.props.onClose();
             }
-            const modalContainer = document.getElementById("custom-modal-container");
-            if (modalContainer) {
-                modalContainer.remove();
-            }
-        }, 300);  
+        }, 300);
     }
 
     scheduleMessage = () => {
@@ -88,30 +105,17 @@ class CustomModal extends React.Component {
         const currentTime = new Date();
 
         if (!message || !date || !time) {
-            BdApi.showToast("Please fill in all fields", { type: "error" });
+            BdApi.UI.showToast("Please fill in all fields", { type: "error" });
             return;
         }
 
         if (scheduledTime > currentTime) {
-            const delay = scheduledTime - currentTime;
-            setTimeout(() => {
-                this.sendMessage(this.props.channelId, message);
-            }, delay);
-
-            BdApi.showToast("Message successfully scheduled", { type: "success" });
+            const messageId = Date.now().toString();
+            ScheduledMessagesStore.addMessage(messageId, this.props.channelId, message, scheduledTime.getTime());
+            BdApi.UI.showToast("Message successfully scheduled", { type: "success" });
             this.handleClose();
         } else {
-            BdApi.showToast("The scheduled time is in the past", { type: "error" });
-        }
-    }
-
-    sendMessage = (channelId, message) => {
-        const MessageActions = Webpack.getModule(m => m?.sendMessage && m?.editMessage);
-        if (MessageActions) {
-            MessageActions.sendMessage(channelId, { content: message });
-            BdApi.showToast("Message sent successfully", { type: "success" });
-        } else {
-            BdApi.showToast("Failed to send message", { type: "error" });
+            BdApi.UI.showToast("The scheduled time is in the past", { type: "error" });
         }
     }
 
@@ -248,16 +252,25 @@ class CustomModal extends React.Component {
     }
 }
 
+let activeModal = null;
+
 function openCustomModal(channelId) {
+    if (activeModal) {
+        document.body.removeChild(activeModal);
+    }
+
     const modalContainer = document.createElement("div");
     modalContainer.id = "custom-modal-container";
     document.body.appendChild(modalContainer);
+    activeModal = modalContainer;
 
     BdApi.ReactDOM.render(
         React.createElement(CustomModal, {
             channelId: channelId,
             onClose: () => {
                 BdApi.ReactDOM.unmountComponentAtNode(modalContainer);
+                document.body.removeChild(modalContainer);
+                activeModal = null;
             }
         }),
         modalContainer
@@ -265,15 +278,48 @@ function openCustomModal(channelId) {
 }
 
 class ScheduledMessage {
+    constructor() {
+        this.checkMessages = this.checkMessages.bind(this);
+    }
+
+    sendMessage(channelId, message) {
+        const MessageActions = Webpack.getModule(m => m?.sendMessage && m?.editMessage);
+        if (MessageActions) {
+            MessageActions.sendMessage(channelId, { content: message });
+            BdApi.UI.showToast("Message sent successfully", { type: "success" });
+        } else {
+            BdApi.UI.showToast("Failed to send message", { type: "error" });
+        }
+    }
+
+    checkMessages() {
+        const currentTime = Date.now();
+        for (const [id, messageData] of ScheduledMessagesStore.messages) {
+            if (currentTime >= messageData.scheduledTime) {
+                this.sendMessage(messageData.channelId, messageData.message);
+                ScheduledMessagesStore.removeMessage(id);
+            }
+        }
+    }
+
     start() {
         this.patchChannelTextArea();
+        ScheduledMessagesStore.checkInterval = setInterval(this.checkMessages, 1000);
     }
 
     stop() {
         Patcher.unpatchAll();
+        if (ScheduledMessagesStore.checkInterval) {
+            clearInterval(ScheduledMessagesStore.checkInterval);
+            ScheduledMessagesStore.checkInterval = null;
+        }
+        ScheduledMessagesStore.clearAll();
+        if (activeModal) {
+            document.body.removeChild(activeModal);
+            activeModal = null;
+        }
     }
-
-        patchChannelTextArea() {
+    patchChannelTextArea() {
         const ChannelTextArea = Webpack.getModule(m => m?.type?.render?.toString?.()?.includes?.("CHANNEL_TEXT_AREA"));
         Patcher.after(ChannelTextArea.type, "render", (_, __, res) => {
             const chatBar = Utils.findInTree(res, e => Array.isArray(e?.children) && e.children.some(c => c?.props?.className?.startsWith("attachButton")), {
@@ -286,30 +332,38 @@ class ScheduledMessage {
             });
             if (!textAreaState) return console.error("[ScheduledMessage] Failed to find textAreaState");
     
-            chatBar.children.splice(-1, 0, React.createElement("button", {
-                onClick: () => openCustomModal(textAreaState.props.channel.id),  
+            const existingButton = chatBar.children.find(child => child?.props?.className?.startsWith("buttonContainer-"));
+            const buttonClass = existingButton?.props?.className || "";
+    
+            chatBar.children.splice(-1, 0, React.createElement("div", {
+                className: buttonClass, 
+            }, React.createElement("button", {
+                className: "button-", 
+                onClick: () => openCustomModal(textAreaState.props.channel.id),
                 style: {
                     background: "none",
                     border: "none",
                     cursor: "pointer",
                     padding: "0",
-                    margin: "0 5px",
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
-                    transition: "transform 0.2s",  
+                    justifyContent: "center",
+                    transition: "transform 0.2s",
+                    color: "var(--interactive-normal)",
+                    minHeight: "44px",
+                    margin: "0 8px"
                 },
-                onMouseEnter: (e) => e.currentTarget.style.transform = "scale(1.1)",  
-                onMouseLeave: (e) => e.currentTarget.style.transform = "scale(1)",  
+                onMouseEnter: (e) => e.currentTarget.style.transform = "scale(1.1)",
+                onMouseLeave: (e) => e.currentTarget.style.transform = "scale(1)",
             }, React.createElement("svg", {
                 width: "24",
                 height: "24",
                 viewBox: "0 0 24 24"
             }, React.createElement("path", {
-                fill: "rgba(255, 255, 255, 0.8)",           
+                fill: "currentColor",
                 d: "M12 2a10 10 0 100 20 10 10 0 000-20zm1 10.5h-4v-1h3V7h1v5.5z"
-            }))));
+            })))));
         });
     }
 }
-
 module.exports = ScheduledMessage;
