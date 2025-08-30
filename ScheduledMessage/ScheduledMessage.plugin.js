@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 2.0.0
+ * @version 2.1.0
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
@@ -615,25 +615,56 @@ class ScheduledMessage {
         this.checkMessages = this.checkMessages.bind(this);
     }
 
-    sendMessage(channelId, message) {
-        const MessageActions = BdApi.Webpack.getModule(m => m?.sendMessage && m?.editMessage);
-        if (MessageActions) {
-            MessageActions.sendMessage(channelId, { content: message });
-            BdApi.UI.showToast("Message sent successfully", { type: "success" });
-        } else {
-            BdApi.UI.showToast("Failed to send message", { type: "error" });
-        }
+async sendMessage(channelId, message) {
+    const MessageActions = BdApi.Webpack.getModule(m => m?.sendMessage && m?.editMessage);
+    if (!MessageActions) {
+        BdApi.UI.showToast("Failed to get MessageActions", { type: "error" });
+        return false;
     }
 
-    checkMessages() {
-        const currentTime = Date.now();
-        for (const [id, messageData] of ScheduledMessagesStore.messages) {
-            if (currentTime >= messageData.scheduledTime) {
-                this.sendMessage(messageData.channelId, messageData.message);
-                ScheduledMessagesStore.removeMessage(id);
+    const NonceModule = BdApi.Webpack.getModule(m => (m?.v4 && m?.parse) || m?.uuidv4);
+    const nonce = NonceModule?.v4?.() || NonceModule?.uuidv4?.() || Date.now().toString();
+
+    const payload = {
+        content: message,
+        tts: false,
+        invalidEmojis: [],
+        validNonShortcutEmojis: [],
+        allowedMentions: { parse: [] },
+        nonce 
+    };
+
+    const options = { nonce }; 
+
+    try {
+        await MessageActions.sendMessage(channelId, payload);
+    } catch (e1) {
+        try {
+            await MessageActions.sendMessage(channelId, payload, options);
+        } catch (e2) {
+            try {
+                await MessageActions.sendMessage(channelId, payload, undefined, options);
+            } catch (e3) {
+                console.error("[ScheduledMessage] sendMessage failed", e1, e2, e3);
+                BdApi.UI.showToast("Failed to send message (Discord API changed)", { type: "error" });
+                return false;
             }
         }
     }
+
+    BdApi.UI.showToast("Message sent successfully", { type: "success" });
+    return true;
+}
+async checkMessages() {
+    const now = Date.now();
+    for (const [id, data] of ScheduledMessagesStore.messages) {
+        if (now >= data.scheduledTime) {
+            const ok = await this.sendMessage(data.channelId, data.message);
+            if (ok) ScheduledMessagesStore.removeMessage(id);
+        }
+    }
+}
+
 
     getCurrentChannelId() {
         try {
