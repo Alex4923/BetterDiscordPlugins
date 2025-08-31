@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 2.2.0
+ * @version 2.3.0
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
@@ -15,7 +15,7 @@ const React = BdApi.React;
 
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/ScheduledMessage/ScheduledMessage.plugin.js";
 const RELEASES_URL = "https://github.com/Alex4923/BetterDiscordPlugins/releases";
-const CURRENT_VERSION = "2.2.0";
+const CURRENT_VERSION = "2.3.0";
 const UPDATE_BANNER_ID = "scheduled-message-updater-banner";
 
 const ScheduledMessagesStore = {
@@ -35,10 +35,527 @@ const ScheduledMessagesStore = {
     }
 };
 
+class CustomCalendar extends React.Component {
+    constructor(props) {
+        super(props);
+        
+        const today = new Date();
+        this.state = {
+            currentMonth: today.getMonth(),
+            currentYear: today.getFullYear(),
+            selectedDate: props.selectedDate ? new Date(props.selectedDate) : null,
+            isVisible: false,
+            hoveredDate: null
+        };
+        
+        this.monthNames = [
+            'January', 'February', 'March', 'April', 'May', 'June',
+            'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        
+        this.dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    }
+
+    componentDidMount() {
+        setTimeout(() => this.setState({ isVisible: true }), 50);
+    }
+
+    getDaysInMonth(month, year) {
+        return new Date(year, month + 1, 0).getDate();
+    }
+
+    getFirstDayOfMonth(month, year) {
+        return new Date(year, month, 1).getDay();
+    }
+
+    handleDateClick = (day) => {
+        const selectedDate = new Date(this.state.currentYear, this.state.currentMonth, day);
+        this.setState({ selectedDate });
+        if (this.props.onDateSelect) {
+            const year = selectedDate.getFullYear();
+            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+            const dayStr = String(selectedDate.getDate()).padStart(2, '0');
+            const dateString = `${year}-${month}-${dayStr}`;
+            this.props.onDateSelect(dateString);
+        }
+    }
+
+    handlePrevMonth = () => {
+        let { currentMonth, currentYear } = this.state;
+        currentMonth--;
+        if (currentMonth < 0) {
+            currentMonth = 11;
+            currentYear--;
+        }
+        this.setState({ currentMonth, currentYear });
+    }
+
+    handleNextMonth = () => {
+        let { currentMonth, currentYear } = this.state;
+        currentMonth++;
+        if (currentMonth > 11) {
+            currentMonth = 0;
+            currentYear++;
+        }
+        this.setState({ currentMonth, currentYear });
+    }
+
+    isToday = (day) => {
+        const today = new Date();
+        return (
+            day === today.getDate() &&
+            this.state.currentMonth === today.getMonth() &&
+            this.state.currentYear === today.getFullYear()
+        );
+    }
+
+    isSelected = (day) => {
+        if (!this.state.selectedDate) return false;
+        return (
+            day === this.state.selectedDate.getDate() &&
+            this.state.currentMonth === this.state.selectedDate.getMonth() &&
+            this.state.currentYear === this.state.selectedDate.getFullYear()
+        );
+    }
+
+    isPastDate = (day) => {
+        const today = new Date();
+        const checkDate = new Date(this.state.currentYear, this.state.currentMonth, day);
+        today.setHours(0, 0, 0, 0);
+        checkDate.setHours(0, 0, 0, 0);
+        return checkDate < today;
+    }
+
+    render() {
+        const { currentMonth, currentYear, isVisible, hoveredDate } = this.state;
+        const daysInMonth = this.getDaysInMonth(currentMonth, currentYear);
+        const firstDay = this.getFirstDayOfMonth(currentMonth, currentYear);
+
+        const calendarStyle = {
+            position: 'absolute',
+            top: '100%',
+            left: '0',
+            right: '0',
+            backgroundColor: '#2f3136',
+            border: '2px solid #5865f2',
+            borderRadius: '12px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 8px 32px rgba(88, 101, 242, 0.4)',
+            zIndex: '99999', 
+            padding: '20px',
+            marginTop: '8px',
+            transform: isVisible ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(-10px)',
+            opacity: isVisible ? 1 : 0,
+            transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            fontFamily: "Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif"
+        };
+
+        const headerStyle = {
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '20px',
+            padding: '0 8px'
+        };
+
+        const monthYearStyle = {
+            fontSize: '18px',
+            fontWeight: '700',
+            color: '#dcddde',
+            background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            textAlign: 'center',
+            flex: 1
+        };
+
+        const navButtonStyle = {
+            background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+            border: 'none',
+            borderRadius: '8px',
+            width: '36px',
+            height: '36px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 12px rgba(88, 101, 242, 0.3)'
+        };
+
+        const daysHeaderStyle = {
+            display: 'grid',
+            gridTemplateColumns: 'repeat(7, 1fr)',
+            gap: '2px',
+            marginBottom: '12px'
+        };
+
+        const dayHeaderStyle = {
+            textAlign: 'center',
+            fontSize: '10px',
+            fontWeight: '600',
+            color: '#8e9297',
+            padding: '6px 2px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.3px',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap'
+        };
+
+        const daysGridStyle = {
+            display: 'grid',
+            gridTemplateColumns: 'repeat(7, 1fr)',
+            gap: '2px'
+        };
+
+        const days = [];
+        
+        for (let i = 0; i < firstDay; i++) {
+            days.push(
+                React.createElement('div', {
+                    key: `empty-${i}`,
+                    style: { height: '40px' }
+                })
+            );
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const isSelectedDay = this.isSelected(day);
+            const isTodayDay = this.isToday(day);
+            const isPastDay = this.isPastDate(day);
+            const isHovered = hoveredDate === day;
+
+            let dayStyle = {
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '8px',
+                cursor: isPastDay ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '600',
+                transition: 'all 0.2s ease',
+                position: 'relative',
+                overflow: 'hidden'
+            };
+
+            if (isPastDay) {
+                dayStyle = {
+                    ...dayStyle,
+                    color: '#4f545c',
+                    backgroundColor: '#32353b'
+                };
+            } else if (isSelectedDay) {
+                dayStyle = {
+                    ...dayStyle,
+                    background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+                    color: 'white',
+                    boxShadow: '0 6px 20px rgba(88, 101, 242, 0.5)',
+                    transform: 'scale(1.05)'
+                };
+            } else if (isTodayDay) {
+                dayStyle = {
+                    ...dayStyle,
+                    backgroundColor: 'rgba(88, 101, 242, 0.2)',
+                    color: '#5865f2',
+                    border: '2px solid #5865f2'
+                };
+            } else {
+                dayStyle = {
+                    ...dayStyle,
+                    color: '#dcddde',
+                    backgroundColor: isHovered ? 'rgba(88, 101, 242, 0.1)' : 'transparent'
+                };
+            }
+
+            if (isHovered && !isPastDay && !isSelectedDay) {
+                dayStyle.transform = 'scale(1.1)';
+                dayStyle.backgroundColor = 'rgba(88, 101, 242, 0.2)';
+                dayStyle.boxShadow = '0 4px 12px rgba(88, 101, 242, 0.3)';
+            }
+
+            days.push(
+                React.createElement('div', {
+                    key: day,
+                    style: dayStyle,
+                    onClick: isPastDay ? null : () => this.handleDateClick(day),
+                    onMouseEnter: () => !isPastDay && this.setState({ hoveredDate: day }),
+                    onMouseLeave: () => this.setState({ hoveredDate: null })
+                }, day)
+            );
+        }
+
+        return React.createElement('div', { style: calendarStyle }, [
+            React.createElement('div', { key: 'header', style: headerStyle }, [
+                React.createElement('button', {
+                    key: 'prev',
+                    style: navButtonStyle,
+                    onClick: this.handlePrevMonth,
+                    onMouseEnter: (e) => {
+                        e.target.style.transform = 'scale(1.1)';
+                        e.target.style.filter = 'brightness(1.2)';
+                    },
+                    onMouseLeave: (e) => {
+                        e.target.style.transform = 'scale(1)';
+                        e.target.style.filter = 'brightness(1)';
+                    }
+                }, '‹'),
+                React.createElement('div', {
+                    key: 'month-year',
+                    style: monthYearStyle
+                }, `${this.monthNames[currentMonth]} ${currentYear}`),
+                React.createElement('button', {
+                    key: 'next',
+                    style: navButtonStyle,
+                    onClick: this.handleNextMonth,
+                    onMouseEnter: (e) => {
+                        e.target.style.transform = 'scale(1.1)';
+                        e.target.style.filter = 'brightness(1.2)';
+                    },
+                    onMouseLeave: (e) => {
+                        e.target.style.transform = 'scale(1)';
+                        e.target.style.filter = 'brightness(1)';
+                    }
+                }, '›')
+            ]),
+            React.createElement('div', { key: 'days-header', style: daysHeaderStyle },
+                this.dayNames.map((dayName, index) => 
+                    React.createElement('div', {
+                        key: dayName,
+                        style: dayHeaderStyle
+                    }, dayName)
+                )
+            ),
+            React.createElement('div', { key: 'days-grid', style: daysGridStyle }, days)
+        ]);
+    }
+}
+
+class CustomTimePicker extends React.Component {
+    constructor(props) {
+        super(props);
+        
+        this.state = {
+            isVisible: false,
+            selectedHour: props.selectedTime ? parseInt(props.selectedTime.split(':')[0]) : 12,
+            selectedMinute: props.selectedTime ? parseInt(props.selectedTime.split(':')[1]) : 0,
+            hoveredHour: null,
+            hoveredMinute: null
+        };
+    }
+
+    componentDidMount() {
+        setTimeout(() => this.setState({ isVisible: true }), 50);
+    }
+
+    handleHourClick = (hour) => {
+        this.setState({ selectedHour: hour }, () => {
+            this.updateTime();
+        });
+    }
+
+    handleMinuteClick = (minute) => {
+        this.setState({ selectedMinute: minute }, () => {
+            this.updateTime();
+        });
+    }
+
+    updateTime = () => {
+        const { selectedHour, selectedMinute } = this.state;
+        const timeString = `${String(selectedHour).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')}`;
+        if (this.props.onTimeSelect) {
+            this.props.onTimeSelect(timeString);
+        }
+    }
+
+    render() {
+        const { isVisible, selectedHour, selectedMinute, hoveredHour, hoveredMinute } = this.state;
+
+        const timePickerStyle = {
+            position: 'absolute',
+            top: '100%',
+            left: '0',
+            right: '0',
+            backgroundColor: '#2f3136',
+            border: '2px solid #5865f2',
+            borderRadius: '12px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 8px 32px rgba(88, 101, 242, 0.4)',
+            zIndex: '99999',
+            padding: '20px',
+            marginTop: '8px',
+            transform: isVisible ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(-10px)',
+            opacity: isVisible ? 1 : 0,
+            transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            fontFamily: "Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            display: 'flex',
+            gap: '20px',
+            maxHeight: '300px'
+        };
+
+        const sectionStyle = {
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center'
+        };
+
+        const titleStyle = {
+            fontSize: '14px',
+            fontWeight: '700',
+            color: '#dcddde',
+            marginBottom: '12px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+        };
+
+        const timeGridStyle = {
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: '6px',
+            width: '100%'
+        };
+
+        const minuteGridStyle = {
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, 1fr)',
+            gap: '4px',
+            width: '100%',
+            maxHeight: '200px',
+            overflowY: 'auto',
+            paddingRight: '8px'
+        };
+
+        const hours = [];
+        for (let hour = 0; hour < 24; hour++) {
+            const isSelected = hour === selectedHour;
+            const isHovered = hour === hoveredHour;
+
+            let hourStyle = {
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+                transition: 'all 0.2s ease'
+            };
+
+            if (isSelected) {
+                hourStyle = {
+                    ...hourStyle,
+                    background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+                    color: 'white',
+                    boxShadow: '0 4px 12px rgba(88, 101, 242, 0.5)',
+                    transform: 'scale(1.05)'
+                };
+            } else {
+                hourStyle = {
+                    ...hourStyle,
+                    color: '#dcddde',
+                    backgroundColor: isHovered ? 'rgba(88, 101, 242, 0.2)' : 'transparent'
+                };
+            }
+
+            if (isHovered && !isSelected) {
+                hourStyle.transform = 'scale(1.1)';
+                hourStyle.backgroundColor = 'rgba(88, 101, 242, 0.2)';
+                hourStyle.boxShadow = '0 2px 8px rgba(88, 101, 242, 0.3)';
+            }
+
+            hours.push(
+                React.createElement('div', {
+                    key: hour,
+                    style: hourStyle,
+                    onClick: () => this.handleHourClick(hour),
+                    onMouseEnter: () => this.setState({ hoveredHour: hour }),
+                    onMouseLeave: () => this.setState({ hoveredHour: null })
+                }, String(hour).padStart(2, '0'))
+            );
+        }
+
+        const minutes = [];
+        for (let minute = 0; minute < 60; minute++) {
+            const isSelected = minute === selectedMinute;
+            const isHovered = minute === hoveredMinute;
+
+            let minuteStyle = {
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontWeight: '600',
+                transition: 'all 0.2s ease'
+            };
+
+            if (isSelected) {
+                minuteStyle = {
+                    ...minuteStyle,
+                    background: 'linear-gradient(135deg, #5865f2 0%, #7289da 100%)',
+                    color: 'white',
+                    boxShadow: '0 4px 12px rgba(88, 101, 242, 0.5)',
+                    transform: 'scale(1.05)'
+                };
+            } else {
+                minuteStyle = {
+                    ...minuteStyle,
+                    color: '#dcddde',
+                    backgroundColor: isHovered ? 'rgba(88, 101, 242, 0.2)' : 'transparent'
+                };
+            }
+
+            if (isHovered && !isSelected) {
+                minuteStyle.transform = 'scale(1.1)';
+                minuteStyle.backgroundColor = 'rgba(88, 101, 242, 0.2)';
+                minuteStyle.boxShadow = '0 2px 8px rgba(88, 101, 242, 0.3)';
+            }
+
+            minutes.push(
+                React.createElement('div', {
+                    key: minute,
+                    style: minuteStyle,
+                    onClick: () => this.handleMinuteClick(minute),
+                    onMouseEnter: () => this.setState({ hoveredMinute: minute }),
+                    onMouseLeave: () => this.setState({ hoveredMinute: null })
+                }, String(minute).padStart(2, '0'))
+            );
+        }
+
+        return React.createElement('div', { style: timePickerStyle }, [
+            React.createElement('div', { key: 'hours-section', style: sectionStyle }, [
+                React.createElement('div', { key: 'hours-title', style: titleStyle }, 'Hours'),
+                React.createElement('div', { key: 'hours-grid', style: timeGridStyle }, hours)
+            ]),
+            React.createElement('div', { key: 'minutes-section', style: sectionStyle }, [
+                React.createElement('div', { key: 'minutes-title', style: titleStyle }, 'Minutes'),
+                React.createElement('div', { key: 'minutes-grid', style: minuteGridStyle }, minutes)
+            ])
+        ]);
+    }
+}
+
 class CustomModal extends React.Component {
     constructor(props) {
         super(props);
-        this.state = { message: "", date: "", time: "", isVisible: false };
+        this.state = { 
+            message: "", 
+            date: "", 
+            time: "", 
+            isVisible: false,
+            showCalendar: false,
+            showTimePicker: false
+        };
     }
 
     componentDidMount() {
@@ -47,47 +564,51 @@ class CustomModal extends React.Component {
         });
     }
 
+    componentWillUnmount() {
+    }
+
+    handleModalClick = (e) => {
+        const isCalendarClick = e.target.closest('.calendar-container');
+        const isTimePickerClick = e.target.closest('.time-picker-container');
+        
+        if (!isCalendarClick && this.state.showCalendar) {
+            this.setState({ showCalendar: false });
+        }
+        
+        if (!isTimePickerClick && this.state.showTimePicker) {
+            this.setState({ showTimePicker: false });
+        }
+    }
+
     handleInputChange = (event) => {
         const { name, value } = event.target;
         this.setState({ [name]: value });
     }
 
+    handleDateSelect = (dateString) => {
+        this.setState({ 
+            date: dateString,
+            showCalendar: false
+        });
+    }
+
+    handleTimeSelect = (timeString) => {
+        this.setState({ 
+            time: timeString,
+            showTimePicker: false
+        });
+    }
+
     handleDateFieldClick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        const dateInput = document.querySelector('#custom-modal-container input[name="date"]');
-        if (dateInput) {
-            dateInput.focus();
-            try {
-                if (dateInput.showPicker) {
-                    dateInput.showPicker();
-                } else {
-                    dateInput.click();
-                }
-            } catch (e) {
-                dateInput.click();
-            }
-        }
+        this.setState({ showCalendar: !this.state.showCalendar, showTimePicker: false });
     }
 
     handleTimeFieldClick = (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        const timeInput = document.querySelector('#custom-modal-container input[name="time"]');
-        if (timeInput) {
-            timeInput.focus();
-            try {
-                if (timeInput.showPicker) {
-                    timeInput.showPicker();
-                } else {
-                    timeInput.click();
-                }
-            } catch (e) {
-                timeInput.click();
-            }
-        }
+        this.setState({ showTimePicker: !this.state.showTimePicker, showCalendar: false });
     }
 
     handleClose = () => {
@@ -107,7 +628,7 @@ class CustomModal extends React.Component {
         if (scheduledTime > new Date()) {
             const messageId = Date.now().toString();
             ScheduledMessagesStore.addMessage(messageId, this.props.channelId, message, scheduledTime.getTime());
-            BdApi.UI.showToast("Message successfully scheduled", { type: "success" });
+            BdApi.UI.showToast("Message scheduled successfully", { type: "success" });
             this.handleClose();
         } else {
             BdApi.UI.showToast("The scheduled time is in the past", { type: "error" });
@@ -145,7 +666,7 @@ class CustomModal extends React.Component {
             transform: this.state.isVisible ? "scale(1) translateY(0)" : "scale(0.85) translateY(20px)",
             transition: "all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
             boxSizing: "border-box",
-            overflow: "hidden",
+            overflow: "visible",
             position: "relative"
         };
 
@@ -224,7 +745,8 @@ class CustomModal extends React.Component {
             fontFamily: "inherit",
             boxSizing: "border-box",
             transition: "all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
-            boxShadow: "inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 1px 0 rgba(255, 255, 255, 0.05)"
+            boxShadow: "inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 1px 0 rgba(255, 255, 255, 0.05)",
+            zIndex: "10002" 
         };
 
         const textareaStyle = {
@@ -255,30 +777,33 @@ class CustomModal extends React.Component {
 
         const fieldContainerStyle = {
             boxSizing: "border-box",
-            cursor: "pointer",
             transition: "all 0.2s ease",
             position: "relative",
             borderRadius: "8px",
-            padding: "0"
+            padding: "0",
+            zIndex: (this.state.showCalendar || this.state.showTimePicker) ? "50000" : "auto"
         };
 
-        const clickableOverlayStyle = {
-            position: "absolute",
-            top: "0",
-            left: "0",
-            right: "0",
-            bottom: "0",
-            cursor: "pointer",
-            zIndex: "2",
-            backgroundColor: "transparent"
-        };
-
-        const clickableInputStyle = {
+        const customDateInputStyle = {
             ...inputStyle,
             cursor: "pointer",
-            pointerEvents: "all",
-            position: "relative",
-            zIndex: "1"
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "linear-gradient(135deg, #40444b 0%, #36393f 100%)",
+            border: this.state.showCalendar ? "2px solid #5865f2" : "2px solid #4f545c",
+            zIndex: "auto" 
+        };
+
+        const customTimeInputStyle = {
+            ...inputStyle,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "linear-gradient(135deg, #40444b 0%, #36393f 100%)",
+            border: this.state.showTimePicker ? "2px solid #5865f2" : "2px solid #4f545c",
+            zIndex: "auto"
         };
 
         const footerStyle = {
@@ -336,13 +861,33 @@ class CustomModal extends React.Component {
             backgroundSize: "200% 200%"
         };
 
+        const formatDisplayDate = (dateStr) => {
+            if (!dateStr) return 'Select a date';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        };
+
+        const formatDisplayTime = (timeStr) => {
+            if (!timeStr) return 'Select a time';
+            const [hours, minutes] = timeStr.split(':');
+            return `${hours}:${minutes}`;
+        };
+
         return React.createElement("div", { 
             style: modalStyle, 
             onClick: this.handleClose 
         },
             React.createElement("div", { 
                 style: containerStyle, 
-                onClick: (e) => e.stopPropagation() 
+                onClick: (e) => {
+                    e.stopPropagation(); 
+                    this.handleModalClick(e); 
+                }
             }, [
                 React.createElement("div", { 
                     key: "header",
@@ -351,7 +896,7 @@ class CustomModal extends React.Component {
                     React.createElement("h2", { 
                         key: "title",
                         style: titleStyle 
-                    }, "Schedule a Message"),
+                    }, "Schedule a message"),
                     React.createElement("button", {
                         key: "close",
                         style: closeButtonStyle,
@@ -395,20 +940,31 @@ class CustomModal extends React.Component {
                             }, "Date"),
                             React.createElement("div", {
                                 key: "date-input-container",
-                                style: { position: "relative" }
+                                style: { position: "relative" },
+                                className: "calendar-container",
+                                onClick: (e) => e.stopPropagation()
                             }, [
-                                React.createElement("input", {
-                                    key: "date-input",
-                                    type: "date",
-                                    name: "date",
-                                    value: this.state.date,
-                                    onChange: this.handleInputChange,
-                                    style: clickableInputStyle
-                                }),
                                 React.createElement("div", {
-                                    key: "date-overlay",
-                                    style: clickableOverlayStyle,
+                                    key: "custom-date-input",
+                                    style: customDateInputStyle,
                                     onClick: this.handleDateFieldClick
+                                }, [
+                                    React.createElement("span", {
+                                        key: "date-text"
+                                    }, formatDisplayDate(this.state.date)),
+                                    React.createElement("span", {
+                                        key: "calendar-icon",
+                                        style: {
+                                            fontSize: '18px',
+                                            color: '#5865f2',
+                                            marginLeft: '8px'
+                                        }
+                                    }, "📅")
+                                ]),
+                                this.state.showCalendar && React.createElement(CustomCalendar, {
+                                    key: "calendar",
+                                    selectedDate: this.state.date,
+                                    onDateSelect: this.handleDateSelect
                                 })
                             ])
                         ]),
@@ -423,20 +979,31 @@ class CustomModal extends React.Component {
                             }, "Time"),
                             React.createElement("div", {
                                 key: "time-input-container",
-                                style: { position: "relative" }
+                                style: { position: "relative" },
+                                className: "time-picker-container",
+                                onClick: (e) => e.stopPropagation()
                             }, [
-                                React.createElement("input", {
-                                    key: "time-input",
-                                    type: "time",
-                                    name: "time",
-                                    value: this.state.time,
-                                    onChange: this.handleInputChange,
-                                    style: clickableInputStyle
-                                }),
                                 React.createElement("div", {
-                                    key: "time-overlay",
-                                    style: clickableOverlayStyle,
+                                    key: "custom-time-input",
+                                    style: customTimeInputStyle,
                                     onClick: this.handleTimeFieldClick
+                                }, [
+                                    React.createElement("span", {
+                                        key: "time-text"
+                                    }, formatDisplayTime(this.state.time)),
+                                    React.createElement("span", {
+                                        key: "clock-icon",
+                                        style: {
+                                            fontSize: '18px',
+                                            color: '#5865f2',
+                                            marginLeft: '8px'
+                                        }
+                                    }, "🕐")
+                                ]),
+                                this.state.showTimePicker && React.createElement(CustomTimePicker, {
+                                    key: "time-picker",
+                                    selectedTime: this.state.time,
+                                    onTimeSelect: this.handleTimeSelect
                                 })
                             ])
                         ])
@@ -477,6 +1044,26 @@ function injectAnimationCSS() {
             100% { background-position: 0% 50%; }
         }
         
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        @keyframes pulseGlow {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(88, 101, 242, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(88, 101, 242, 0.1);
+            }
+        }
+        
         #scheduled-message-button {
             transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
         }
@@ -487,14 +1074,6 @@ function injectAnimationCSS() {
             filter: drop-shadow(0 0 8px rgba(88, 101, 242, 0.5));
         }
         
-        /* Make date/time fields fully clickable */
-        #custom-modal-container input[type="date"],
-        #custom-modal-container input[type="time"] {
-            cursor: pointer !important;
-            width: 100% !important;
-        }
-        
-        /* Style the date/time field containers */
         #custom-modal-container .field-container {
             transition: all 0.2s ease !important;
             position: relative !important;
@@ -504,17 +1083,72 @@ function injectAnimationCSS() {
             transform: translateY(-1px);
         }
         
-        #custom-modal-container .field-container:hover input {
+        #custom-modal-container [style*="cursor: pointer"]:hover {
             border-color: #5865f2 !important;
-            box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2) !important;
+            box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.3), 0 4px 12px rgba(88, 101, 242, 0.2) !important;
+            transform: translateY(-2px) !important;
+            z-index: initial !important; 
         }
         
-        /* Debug: Make overlay visible for testing (remove after confirmation) */
-        #custom-modal-container .field-container div[style*="position: absolute"]:hover {
-            background-color: rgba(88, 101, 242, 0.1) !important;
+        #custom-modal-container [style*="position: absolute"][style*="backgroundColor: #2f3136"] {
+            animation: slideDown 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
         }
         
-        /* Input focus effects */
+        #custom-modal-container .calendar-container {
+            z-index: 50000 !important;
+            position: relative !important;
+        }
+        
+        #custom-modal-container .calendar-container > div[style*="position: absolute"] {
+            z-index: 99999 !important;
+        }
+        
+        #custom-modal-container .time-picker-container {
+            z-index: 50000 !important;
+            position: relative !important;
+        }
+        
+        #custom-modal-container .time-picker-container > div[style*="position: absolute"] {
+            z-index: 99999 !important;
+        }
+        
+        #custom-modal-container *::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        #custom-modal-container *::-webkit-scrollbar-track {
+            background: rgba(32, 34, 37, 0.6);
+            border-radius: 4px;
+        }
+        
+        #custom-modal-container *::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #5865f2 0%, #7289da 100%);
+            border-radius: 4px;
+            transition: background 0.3s ease;
+        }
+        
+        #custom-modal-container *::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #4752c4 0%, #5865f2 100%);
+            box-shadow: 0 0 6px rgba(88, 101, 242, 0.4);
+        }
+        
+        #custom-modal-container *::-webkit-scrollbar-thumb:active {
+            background: linear-gradient(135deg, #3c45a5 0%, #4752c4 100%);
+        }
+        
+        #custom-modal-container * {
+            scrollbar-width: thin;
+            scrollbar-color: #5865f2 rgba(32, 34, 37, 0.6);
+        }
+        
+        #custom-modal-container [style*="display: grid"][style*="repeat(7, 1fr)"] > div {
+            transition: all 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+        }
+        
+        #custom-modal-container [style*="background: linear-gradient(135deg, #5865f2"] {
+            animation: pulseGlow 2s infinite !important;
+        }
+        
         #custom-modal-container input:focus,
         #custom-modal-container textarea:focus {
             border-color: #5865f2 !important;
@@ -522,25 +1156,49 @@ function injectAnimationCSS() {
             transform: translateY(-1px);
         }
         
-        /* Button hover effects */
+        #custom-modal-container input[type="time"] {
+            position: relative !important;
+            z-index: 10002 !important;
+        }
+        
+        #custom-modal-container input[type="time"]:hover {
+            border-color: #5865f2 !important;
+            box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2) !important;
+            transform: translateY(-1px);
+        }
+        
+        #custom-modal-container input[type="time"]::-webkit-calendar-picker-indicator,
+        #custom-modal-container input[type="time"]::-webkit-datetime-edit {
+            z-index: 10003 !important;
+            position: relative !important;
+        }
+        
         #custom-modal-container button:not(:disabled):hover {
             transform: translateY(-2px);
             filter: brightness(1.1);
         }
         
-        /* Close button hover */
         #custom-modal-container .close-btn:hover {
             background: rgba(255, 255, 255, 0.25) !important;
             transform: rotate(90deg) scale(1.1);
         }
         
-        /* Gradient animation for submit button */
         #custom-modal-container .submit-btn:not(:disabled) {
             animation: gradientShift 3s ease infinite;
         }
         
         #custom-modal-container .submit-btn:not(:disabled):hover {
             box-shadow: 0 8px 25px rgba(88, 101, 242, 0.6), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+        }
+        
+        #custom-modal-container input[type="date"]::-webkit-calendar-picker-indicator {
+            display: none;
+        }
+        
+        #custom-modal-container input[type="date"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
         }
     `;
     document.head.appendChild(style);
@@ -555,7 +1213,6 @@ let activeModal = null;
 let reactRoot = null;
 
 function openCustomModal(channelId) {
-    
     if (activeModal) {
         return;
     }
@@ -648,7 +1305,7 @@ class ScheduledMessage {
             position: fixed;
             left: 50%;
             transform: translateX(-50%);
-            top: 52px; /* sous la bannière BetterDiscord */
+            top: 52px;
             z-index: 9999;
             background: #202225;
             color: #fff;
@@ -868,7 +1525,7 @@ class ScheduledMessage {
         this.buttonCheckInterval = setInterval(() => this.injectButton(), 2000);
 
         this.checkForUpdates();
-        this.updateIntervalId = setInterval(() => this.checkForUpdates(), 6 * 60 * 60 * 1000); // 6h
+        this.updateIntervalId = setInterval(() => this.checkForUpdates(), 6 * 60 * 60 * 1000); 
     }
 
     stop() {
