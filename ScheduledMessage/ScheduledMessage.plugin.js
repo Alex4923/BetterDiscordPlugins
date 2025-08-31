@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 2.1.0
+ * @version 2.2.0
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
@@ -12,6 +12,11 @@
 'use strict';
 
 const React = BdApi.React;
+
+const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/ScheduledMessage/ScheduledMessage.plugin.js";
+const RELEASES_URL = "https://github.com/Alex4923/BetterDiscordPlugins/releases";
+const CURRENT_VERSION = "2.2.0";
+const UPDATE_BANNER_ID = "scheduled-message-updater-banner";
 
 const ScheduledMessagesStore = {
     messages: new Map(),
@@ -613,58 +618,156 @@ function openCustomModal(channelId) {
 class ScheduledMessage {
     constructor() {
         this.checkMessages = this.checkMessages.bind(this);
+        this.updateIntervalId = null;
     }
 
-async sendMessage(channelId, message) {
-    const MessageActions = BdApi.Webpack.getModule(m => m?.sendMessage && m?.editMessage);
-    if (!MessageActions) {
-        BdApi.UI.showToast("Failed to get MessageActions", { type: "error" });
-        return false;
+    compareVersions(a, b) {
+        const pa = a.split('.').map(n => parseInt(n, 10));
+        const pb = b.split('.').map(n => parseInt(n, 10));
+        const len = Math.max(pa.length, pb.length);
+        for (let i = 0; i < len; i++) {
+            const na = pa[i] || 0;
+            const nb = pb[i] || 0;
+            if (na > nb) return 1;
+            if (na < nb) return -1;
+        }
+        return 0;
     }
 
-    const NonceModule = BdApi.Webpack.getModule(m => (m?.v4 && m?.parse) || m?.uuidv4);
-    const nonce = NonceModule?.v4?.() || NonceModule?.uuidv4?.() || Date.now().toString();
+    removeUpdateBanner() {
+        const banner = document.getElementById(UPDATE_BANNER_ID);
+        if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+    }
 
-    const payload = {
-        content: message,
-        tts: false,
-        invalidEmojis: [],
-        validNonShortcutEmojis: [],
-        allowedMentions: { parse: [] },
-        nonce 
-    };
+    showUpdateBanner(remoteVersion) {
+        this.removeUpdateBanner();
 
-    const options = { nonce }; 
+        const banner = document.createElement('div');
+        banner.id = UPDATE_BANNER_ID;
+        banner.style.cssText = `
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            top: 52px; /* sous la bannière BetterDiscord */
+            z-index: 9999;
+            background: #202225;
+            color: #fff;
+            border: 1px solid #2f3136;
+            border-radius: 8px;
+            padding: 10px 14px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.45);
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-family: Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        `;
 
-    try {
-        await MessageActions.sendMessage(channelId, payload);
-    } catch (e1) {
+        const text = document.createElement('div');
+        text.textContent = `ScheduledMessage ${CURRENT_VERSION} → ${remoteVersion} available`;
+
+        const btnDownload = document.createElement('a');
+        btnDownload.href = UPDATE_CHECK_URL;
+        btnDownload.target = "_blank";
+        btnDownload.rel = "noreferrer";
+        btnDownload.textContent = "Download";
+        btnDownload.style.cssText = `
+            background:#5865f2;border:none;padding:6px 10px;border-radius:6px;
+            color:#fff;text-decoration:none;font-weight:600
+        `;
+
+        const btnChangelog = document.createElement('a');
+        btnChangelog.href = RELEASES_URL;
+        btnChangelog.target = "_blank";
+        btnChangelog.rel = "noreferrer";
+        btnChangelog.textContent = "Changelog";
+        btnChangelog.style.cssText = `
+            background:#4f545c;border:none;padding:6px 10px;border-radius:6px;
+            color:#fff;text-decoration:none;font-weight:600
+        `;
+
+        const close = document.createElement('button');
+        close.textContent = "✕";
+        close.style.cssText = `
+            background:transparent;border:none;color:#b9bbbe;cursor:pointer;
+            font-size:16px;margin-left:4px
+        `;
+        close.onclick = () => this.removeUpdateBanner();
+
+        banner.appendChild(text);
+        banner.appendChild(btnDownload);
+        banner.appendChild(btnChangelog);
+        banner.appendChild(close);
+
+        document.body.appendChild(banner);
+    }
+
+    async checkForUpdates() {
         try {
-            await MessageActions.sendMessage(channelId, payload, options);
-        } catch (e2) {
+            const res = await BdApi.Net.fetch(UPDATE_CHECK_URL, { cache: "no-store" });
+            if (!res?.ok) return;
+            const text = await res.text();
+            const match = text.match(/@version\s+([0-9.]+)/);
+            const remote = match?.[1];
+            if (!remote) return;
+            if (this.compareVersions(remote, CURRENT_VERSION) > 0) {
+                this.showUpdateBanner(remote);
+            } else {
+                this.removeUpdateBanner();
+            }
+        } catch (e) {
+        }
+    }
+
+    async sendMessage(channelId, message) {
+        const MessageActions = BdApi.Webpack.getModule(m => m?.sendMessage && m?.editMessage);
+        if (!MessageActions) {
+            BdApi.UI.showToast("Failed to get MessageActions", { type: "error" });
+            return false;
+        }
+
+        const NonceModule = BdApi.Webpack.getModule(m => (m?.v4 && m?.parse) || m?.uuidv4);
+        const nonce = NonceModule?.v4?.() || NonceModule?.uuidv4?.() || Date.now().toString();
+
+        const payload = {
+            content: message,
+            tts: false,
+            invalidEmojis: [],
+            validNonShortcutEmojis: [],
+            allowedMentions: { parse: [] },
+            nonce 
+        };
+
+        const options = { nonce }; 
+
+        try {
+            await MessageActions.sendMessage(channelId, payload);
+        } catch (e1) {
             try {
-                await MessageActions.sendMessage(channelId, payload, undefined, options);
-            } catch (e3) {
-                console.error("[ScheduledMessage] sendMessage failed", e1, e2, e3);
-                BdApi.UI.showToast("Failed to send message (Discord API changed)", { type: "error" });
-                return false;
+                await MessageActions.sendMessage(channelId, payload, options);
+            } catch (e2) {
+                try {
+                    await MessageActions.sendMessage(channelId, payload, undefined, options);
+                } catch (e3) {
+                    console.error("[ScheduledMessage] sendMessage failed", e1, e2, e3);
+                    BdApi.UI.showToast("Failed to send message (Discord API changed)", { type: "error" });
+                    return false;
+                }
+            }
+        }
+
+        BdApi.UI.showToast("Message sent successfully", { type: "success" });
+        return true;
+    }
+
+    async checkMessages() {
+        const now = Date.now();
+        for (const [id, data] of ScheduledMessagesStore.messages) {
+            if (now >= data.scheduledTime) {
+                const ok = await this.sendMessage(data.channelId, data.message);
+                if (ok) ScheduledMessagesStore.removeMessage(id);
             }
         }
     }
-
-    BdApi.UI.showToast("Message sent successfully", { type: "success" });
-    return true;
-}
-async checkMessages() {
-    const now = Date.now();
-    for (const [id, data] of ScheduledMessagesStore.messages) {
-        if (now >= data.scheduledTime) {
-            const ok = await this.sendMessage(data.channelId, data.message);
-            if (ok) ScheduledMessagesStore.removeMessage(id);
-        }
-    }
-}
-
 
     getCurrentChannelId() {
         try {
@@ -760,15 +863,15 @@ async checkMessages() {
     start() {
         ScheduledMessagesStore.checkInterval = setInterval(this.checkMessages, 1000);
         this.injectButton();
-        
         this.observer = new MutationObserver(() => this.injectButton());
         this.observer.observe(document.body, { childList: true, subtree: true });
-        
         this.buttonCheckInterval = setInterval(() => this.injectButton(), 2000);
+
+        this.checkForUpdates();
+        this.updateIntervalId = setInterval(() => this.checkForUpdates(), 6 * 60 * 60 * 1000); // 6h
     }
 
     stop() {
-        
         if (ScheduledMessagesStore.checkInterval) {
             clearInterval(ScheduledMessagesStore.checkInterval);
             ScheduledMessagesStore.checkInterval = null;
@@ -802,6 +905,12 @@ async checkMessages() {
             } catch (e) {}
             activeModal = null;
         }
+
+        if (this.updateIntervalId) {
+            clearInterval(this.updateIntervalId);
+            this.updateIntervalId = null;
+        }
+        this.removeUpdateBanner();
     }
 }
 
