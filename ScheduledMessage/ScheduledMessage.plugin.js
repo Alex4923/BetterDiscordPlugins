@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 2.3.0
+ * @version 3.0.0
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
@@ -14,8 +14,9 @@
 const React = BdApi.React;
 
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/ScheduledMessage/ScheduledMessage.plugin.js";
+const DOWNLOAD_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/ScheduledMessage/ScheduledMessage.plugin.js";
 const RELEASES_URL = "https://github.com/Alex4923/BetterDiscordPlugins/releases";
-const CURRENT_VERSION = "2.3.0";
+const CURRENT_VERSION = "3.0.0";
 const UPDATE_BANNER_ID = "scheduled-message-updater-banner";
 
 const ScheduledMessagesStore = {
@@ -23,11 +24,26 @@ const ScheduledMessagesStore = {
     checkInterval: null,
     
     addMessage(id, channelId, message, scheduledTime) {
-        this.messages.set(id, { channelId, message, scheduledTime });
+        this.messages.set(id, { channelId, message, scheduledTime, createdAt: Date.now() });
+    },
+    
+    updateMessage(id, channelId, message, scheduledTime) {
+        if (this.messages.has(id)) {
+            const existing = this.messages.get(id);
+            this.messages.set(id, { ...existing, channelId, message, scheduledTime });
+        }
     },
     
     removeMessage(id) {
         this.messages.delete(id);
+    },
+    
+    getMessage(id) {
+        return this.messages.get(id);
+    },
+    
+    getAllMessages() {
+        return Array.from(this.messages.entries()).map(([id, data]) => ({ id, ...data }));
     },
     
     clearAll() {
@@ -354,27 +370,33 @@ class CustomTimePicker extends React.Component {
     }
 
     handleHourClick = (hour) => {
-        this.setState({ selectedHour: hour }, () => {
-            this.updateTime();
-        });
+        const currentMinute = this.props.selectedTime ? parseInt(this.props.selectedTime.split(':')[1]) : 0;
+        const timeString = `${String(hour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+        if (this.props.onTimeSelect) {
+            this.props.onTimeSelect(timeString);
+        }
     }
 
     handleMinuteClick = (minute) => {
-        this.setState({ selectedMinute: minute }, () => {
-            this.updateTime();
-        });
-    }
-
-    updateTime = () => {
-        const { selectedHour, selectedMinute } = this.state;
-        const timeString = `${String(selectedHour).padStart(2, '0')}:${String(selectedMinute).padStart(2, '0')}`;
+        const currentHour = this.props.selectedTime ? parseInt(this.props.selectedTime.split(':')[0]) : 12;
+        const timeString = `${String(currentHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
         if (this.props.onTimeSelect) {
             this.props.onTimeSelect(timeString);
         }
     }
 
     render() {
-        const { isVisible, selectedHour, selectedMinute, hoveredHour, hoveredMinute } = this.state;
+        const { isVisible, hoveredHour, hoveredMinute } = this.state;
+        
+        let selectedHour, selectedMinute;
+        if (this.props.selectedTime) {
+            const timeParts = this.props.selectedTime.split(':');
+            selectedHour = parseInt(timeParts[0]);
+            selectedMinute = parseInt(timeParts[1]);
+        } else {
+            selectedHour = this.state.selectedHour;
+            selectedMinute = this.state.selectedMinute;
+        }
 
         const timePickerStyle = {
             position: 'absolute',
@@ -385,7 +407,7 @@ class CustomTimePicker extends React.Component {
             border: '2px solid #5865f2',
             borderRadius: '12px',
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 8px 32px rgba(88, 101, 242, 0.4)',
-            zIndex: '99999',
+            zIndex: '999999',
             padding: '20px',
             marginTop: '8px',
             transform: isVisible ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(-10px)',
@@ -396,7 +418,9 @@ class CustomTimePicker extends React.Component {
             fontFamily: "Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif",
             display: 'flex',
             gap: '20px',
-            maxHeight: '300px'
+            maxHeight: '300px',
+            pointerEvents: 'auto',
+            ...this.props.style
         };
 
         const sectionStyle = {
@@ -532,7 +556,10 @@ class CustomTimePicker extends React.Component {
             );
         }
 
-        return React.createElement('div', { style: timePickerStyle }, [
+        return React.createElement('div', { 
+            style: timePickerStyle,
+            className: this.props.className 
+        }, [
             React.createElement('div', { key: 'hours-section', style: sectionStyle }, [
                 React.createElement('div', { key: 'hours-title', style: titleStyle }, 'Hours'),
                 React.createElement('div', { key: 'hours-grid', style: timeGridStyle }, hours)
@@ -614,6 +641,18 @@ class CustomModal extends React.Component {
     handleClose = () => {
         this.setState({ isVisible: false });
         setTimeout(() => this.props.onClose && this.props.onClose(), 400);
+    }
+
+    handleOpenManageList = () => {
+        this.setState({ isVisible: false });
+        setTimeout(() => {
+            if (this.props.onClose) {
+                this.props.onClose();
+            }
+            setTimeout(() => {
+                openScheduledMessagesList();
+            }, 100);
+        }, 200);
     }
 
     scheduleMessage = () => {
@@ -1014,6 +1053,26 @@ class CustomModal extends React.Component {
                     style: footerStyle 
                 }, [
                     React.createElement("button", {
+                        key: "manage-btn",
+                        onClick: this.handleOpenManageList,
+                        style: {
+                            padding: "12px 20px", 
+                            fontSize: "15px", 
+                            fontWeight: "600",
+                            borderRadius: "8px", 
+                            cursor: "pointer",
+                            transition: "all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+                            fontFamily: "inherit",
+                            boxSizing: "border-box",
+                            minWidth: "140px",
+                            backgroundColor: "#4f545c", 
+                            color: "#dcddde",
+                            border: "2px solid #4f545c",
+                            marginRight: "auto"
+                        },
+                        className: "manage-btn"
+                    }, `Manage (${ScheduledMessagesStore.getAllMessages().length})`),
+                    React.createElement("button", {
                         key: "cancel-btn",
                         onClick: this.handleClose,
                         style: cancelButtonStyle,
@@ -1027,6 +1086,598 @@ class CustomModal extends React.Component {
                         className: "submit-btn"
                     }, "Schedule")
                 ])
+            ])
+        );
+    }
+}
+
+class ScheduledMessagesList extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { 
+            isVisible: false,
+            editingMessage: null,
+            editMessage: "",
+            editDate: "",
+            editTime: "",
+            showCalendar: false,
+            showTimePicker: false
+        };
+    }
+
+    componentDidMount() {
+        requestAnimationFrame(() => {
+            this.setState({ isVisible: true });
+        });
+    }
+
+    handleModalClick = (e) => {
+        if (this.state.showCalendar && !e.target.closest('[key="date-container"]')) {
+            this.setState({ showCalendar: false });
+        }
+        
+        if (this.state.showTimePicker && !e.target.closest('[key="time-container"]')) {
+            this.setState({ showTimePicker: false });
+        }
+    }
+
+    handleDateSelect = (dateString) => {
+        this.setState({ 
+            editDate: dateString,
+            showCalendar: false
+        });
+    }
+
+    handleTimeSelect = (timeString) => {
+        this.setState({ 
+            editTime: timeString
+        });
+    }
+
+    handleClose = () => {
+        this.setState({ isVisible: false });
+        setTimeout(() => this.props.onClose && this.props.onClose(), 400);
+    }
+
+    handleEdit = (messageData) => {
+        const scheduledDate = new Date(messageData.scheduledTime);
+        const dateStr = scheduledDate.toISOString().split('T')[0];
+        const timeStr = scheduledDate.toTimeString().slice(0, 5);
+        
+        this.setState({
+            editingMessage: messageData.id,
+            editMessage: messageData.message,
+            editDate: dateStr,
+            editTime: timeStr
+        });
+    }
+
+    handleSaveEdit = () => {
+        const { editingMessage, editMessage, editDate, editTime } = this.state;
+        const scheduledTime = new Date(`${editDate}T${editTime}`);
+
+        if (!editMessage || !editDate || !editTime) {
+            BdApi.UI.showToast("Please fill in all fields", { type: "error" });
+            return;
+        }
+
+        if (scheduledTime > new Date()) {
+            const messageData = ScheduledMessagesStore.getMessage(editingMessage);
+            ScheduledMessagesStore.updateMessage(editingMessage, messageData.channelId, editMessage, scheduledTime.getTime());
+            BdApi.UI.showToast("Message updated successfully", { type: "success" });
+            this.setState({ editingMessage: null, editMessage: "", editDate: "", editTime: "" });
+            this.forceUpdate();
+        } else {
+            BdApi.UI.showToast("The scheduled time is in the past", { type: "error" });
+        }
+    }
+
+    handleCancelEdit = () => {
+        this.setState({ 
+            editingMessage: null, 
+            editMessage: "", 
+            editDate: "", 
+            editTime: "",
+            showCalendar: false,
+            showTimePicker: false
+        });
+    }
+
+    handleDateFieldClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.setState({ showCalendar: !this.state.showCalendar, showTimePicker: false });
+    }
+
+    handleTimeFieldClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.setState({ showTimePicker: !this.state.showTimePicker, showCalendar: false });
+    }
+
+    handleDelete = (messageId) => {
+        ScheduledMessagesStore.removeMessage(messageId);
+        BdApi.UI.showToast("Message deleted successfully", { type: "success" });
+        this.forceUpdate();
+    }
+
+    formatDateTime = (timestamp) => {
+        const date = new Date(timestamp);
+        return date.toLocaleString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    getChannelName = (channelId) => {
+        try {
+            const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
+            const channel = ChannelStore?.getChannel?.(channelId);
+            return channel?.name || `Channel ${channelId.slice(-4)}`;
+        } catch (e) {
+            return `Channel ${channelId.slice(-4)}`;
+        }
+    }
+
+    formatDisplayDate = (dateStr) => {
+        if (!dateStr) return 'Select a date';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
+
+    formatDisplayTime = (timeStr) => {
+        if (!timeStr) return 'Select a time';
+        const [hours, minutes] = timeStr.split(':');
+        return `${hours}:${minutes}`;
+    }
+
+    render() {
+        const messages = ScheduledMessagesStore.getAllMessages().sort((a, b) => a.scheduledTime - b.scheduledTime);
+
+        const modalStyle = {
+            position: "fixed", 
+            top: "0", 
+            left: "0", 
+            width: "100%", 
+            height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.85)", 
+            backdropFilter: this.state.isVisible ? "blur(10px)" : "blur(0px)",
+            WebkitBackdropFilter: this.state.isVisible ? "blur(10px)" : "blur(0px)",
+            zIndex: "10000", 
+            display: "flex",
+            alignItems: "center", 
+            justifyContent: "center",
+            opacity: this.state.isVisible ? 1 : 0, 
+            transition: "opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            fontFamily: "Whitney, 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            overflow: "visible"
+        };
+
+        const containerStyle = {
+            width: "800px", 
+            maxWidth: "95vw", 
+            backgroundColor: "#36393f",
+            border: "1px solid #4f545c", 
+            borderRadius: "12px",
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.8)",
+            transform: this.state.isVisible ? "scale(1) translateY(0)" : "scale(0.85) translateY(20px)",
+            transition: "all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "visible"
+        };
+
+        const headerStyle = {
+            background: "linear-gradient(135deg, #5865f2 0%, #7289da 50%, #4752c4 100%)",
+            padding: "24px 32px", 
+            borderRadius: "12px 12px 0 0", 
+            position: "relative"
+        };
+
+        const titleStyle = {
+            margin: "0", 
+            fontSize: "20px", 
+            fontWeight: "700", 
+            color: "white",
+            textShadow: "0 2px 4px rgba(0, 0, 0, 0.3)"
+        };
+
+        const closeButtonStyle = {
+            position: "absolute", 
+            top: "20px", 
+            right: "20px", 
+            background: "rgba(255, 255, 255, 0.15)",
+            border: "1px solid rgba(255, 255, 255, 0.2)", 
+            borderRadius: "8px", 
+            width: "32px", 
+            height: "32px",
+            cursor: "pointer", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center",
+            fontSize: "18px",
+            color: "white",
+            transition: "all 0.3s ease"
+        };
+
+        const bodyStyle = {
+            padding: "24px 32px", 
+            flex: "1",
+            overflow: "visible",
+            position: "relative"
+        };
+
+        const messageItemStyle = {
+            background: "linear-gradient(135deg, #40444b 0%, #36393f 100%)",
+            border: "1px solid #4f545c",
+            borderRadius: "8px",
+            padding: "16px",
+            marginBottom: "12px",
+            transition: "all 0.2s ease"
+        };
+
+        const messageHeaderStyle = {
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "8px"
+        };
+
+        const messageInfoStyle = {
+            fontSize: "12px",
+            color: "#8e9297",
+            fontWeight: "600"
+        };
+
+        const buttonGroupStyle = {
+            display: "flex",
+            gap: "8px"
+        };
+
+        const editButtonStyle = {
+            padding: "10px 18px", 
+            fontSize: "14px", 
+            fontWeight: "600",
+            border: "none", 
+            borderRadius: "8px", 
+            transition: "all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
+            minWidth: "80px",
+            position: "relative",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, #5865f2 0%, #7289da 50%, #4752c4 100%)",
+            color: "white",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(88, 101, 242, 0.4), 0 2px 8px rgba(0, 0, 0, 0.15)",
+            textShadow: "0 1px 2px rgba(0, 0, 0, 0.2)"
+        };
+
+        const deleteButtonStyle = {
+            padding: "10px 18px", 
+            fontSize: "14px", 
+            fontWeight: "600",
+            border: "none", 
+            borderRadius: "8px", 
+            transition: "all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
+            minWidth: "80px",
+            position: "relative",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, #ed4245 0%, #c62d31 100%)",
+            color: "white",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(237, 66, 69, 0.4), 0 2px 8px rgba(0, 0, 0, 0.15)",
+            textShadow: "0 1px 2px rgba(0, 0, 0, 0.2)"
+        };
+
+        const messageContentStyle = {
+            color: "#dcddde",
+            fontSize: "14px",
+            lineHeight: "1.4",
+            maxHeight: "60px",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+        };
+
+        const editFormStyle = {
+            background: "#2f3136",
+            border: "2px solid #5865f2",
+            borderRadius: "8px",
+            padding: "16px",
+            marginTop: "8px",
+            overflow: "visible"
+        };
+
+        const inputStyle = {
+            width: "100%",
+            padding: "8px 12px",
+            backgroundColor: "#40444b",
+            border: "1px solid #4f545c",
+            borderRadius: "4px",
+            color: "#dcddde",
+            fontSize: "14px",
+            marginBottom: "8px",
+            outline: "none",
+            boxSizing: "border-box"
+        };
+
+        const dateTimeRowStyle = {
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "12px",
+            marginBottom: "8px"
+        };
+
+        const editButtonGroupStyle = {
+            display: "flex",
+            gap: "8px",
+            justifyContent: "flex-end"
+        };
+
+        const saveButtonStyle = {
+            padding: "12px 24px", 
+            fontSize: "15px", 
+            fontWeight: "600",
+            border: "none", 
+            borderRadius: "8px", 
+            transition: "all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
+            minWidth: "120px",
+            position: "relative",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, #3ba55d 0%, #2d7d32 100%)",
+            color: "white",
+            cursor: "pointer",
+            boxShadow: "0 6px 20px rgba(59, 165, 93, 0.4), 0 4px 12px rgba(0, 0, 0, 0.15)",
+            textShadow: "0 1px 2px rgba(0, 0, 0, 0.2)"
+        };
+
+        const cancelButtonStyle = {
+            padding: "12px 24px", 
+            fontSize: "15px", 
+            fontWeight: "600",
+            border: "none", 
+            borderRadius: "8px", 
+            transition: "all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+            fontFamily: "inherit",
+            boxSizing: "border-box",
+            minWidth: "120px",
+            position: "relative",
+            overflow: "hidden",
+            background: "linear-gradient(135deg, #4f545c 0%, #3c4043 100%)",
+            color: "#dcddde",
+            cursor: "pointer",
+            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+            textShadow: "0 1px 2px rgba(0, 0, 0, 0.2)"
+        };
+
+        const emptyStateStyle = {
+            textAlign: "center",
+            padding: "40px",
+            color: "#8e9297"
+        };
+
+        const messagesListStyle = {
+            maxHeight: "50vh",
+            overflow: "auto",
+            paddingRight: "8px"
+        };
+
+        return React.createElement("div", { 
+            style: modalStyle, 
+            onClick: this.handleClose 
+        },
+            React.createElement("div", { 
+                style: containerStyle, 
+                onClick: (e) => {
+                    e.stopPropagation(); 
+                    this.handleModalClick(e); 
+                }
+            }, [
+                React.createElement("div", { 
+                    key: "header",
+                    style: headerStyle 
+                }, [
+                    React.createElement("h2", { 
+                        key: "title",
+                        style: titleStyle 
+                    }, `Scheduled Messages (${messages.length})`),
+                    React.createElement("button", {
+                        key: "close",
+                        style: closeButtonStyle,
+                        onClick: this.handleClose
+                    }, "×")
+                ]),
+                React.createElement("div", { 
+                    key: "body",
+                    style: bodyStyle,
+                    className: "scheduled-messages-list"
+                }, messages.length === 0 ? 
+                    React.createElement("div", {
+                        style: emptyStateStyle
+                    }, "No scheduled messages") :
+                    React.createElement("div", {
+                        key: "messages-list",
+                        style: messagesListStyle
+                    }, messages.map(messageData => {
+                        const isEditing = this.state.editingMessage === messageData.id;
+                        
+                        return React.createElement("div", {
+                            key: messageData.id,
+                            style: messageItemStyle
+                        }, [
+                            React.createElement("div", {
+                                key: "header",
+                                style: messageHeaderStyle
+                            }, [
+                                React.createElement("div", {
+                                    key: "info",
+                                    style: messageInfoStyle
+                                }, `${this.getChannelName(messageData.channelId)} • ${this.formatDateTime(messageData.scheduledTime)}`),
+                                !isEditing && React.createElement("div", {
+                                    key: "buttons",
+                                    style: buttonGroupStyle
+                                }, [
+                                    React.createElement("button", {
+                                        key: "edit",
+                                        style: editButtonStyle,
+                                        onClick: () => this.handleEdit(messageData)
+                                    }, "Edit"),
+                                    React.createElement("button", {
+                                        key: "delete",
+                                        style: deleteButtonStyle,
+                                        onClick: () => this.handleDelete(messageData.id)
+                                    }, "Delete")
+                                ])
+                            ]),
+                            !isEditing ? React.createElement("div", {
+                                key: "content",
+                                style: messageContentStyle
+                            }, messageData.message) : React.createElement("div", {
+                                key: "edit-form",
+                                style: editFormStyle
+                            }, [
+                                React.createElement("textarea", {
+                                    key: "message-input",
+                                    style: { ...inputStyle, minHeight: "60px", resize: "vertical", marginBottom: "12px" },
+                                    value: this.state.editMessage,
+                                    onChange: (e) => this.setState({ editMessage: e.target.value }),
+                                    placeholder: "Message content..."
+                                }),
+                                React.createElement("div", {
+                                    key: "datetime-row",
+                                    style: dateTimeRowStyle
+                                }, [
+                                    React.createElement("div", {
+                                        key: "date-container",
+                                        style: { position: "relative" }
+                                    }, [
+                                        React.createElement("div", {
+                                            key: "custom-date-input",
+                                            style: {
+                                                width: "100%",
+                                                padding: "8px 12px",
+                                                backgroundColor: "#40444b",
+                                                border: this.state.showCalendar ? "2px solid #5865f2" : "1px solid #4f545c",
+                                                borderRadius: "4px",
+                                                color: "#dcddde",
+                                                fontSize: "14px",
+                                                cursor: "pointer",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                boxSizing: "border-box"
+                                            },
+                                            onClick: this.handleDateFieldClick
+                                        }, [
+                                            React.createElement("span", {
+                                                key: "date-text",
+                                                style: { fontSize: "12px" }
+                                            }, this.formatDisplayDate(this.state.editDate)),
+                                            React.createElement("span", {
+                                                key: "calendar-icon",
+                                                style: {
+                                                    fontSize: '14px',
+                                                    color: '#5865f2',
+                                                    marginLeft: '8px'
+                                                }
+                                            }, "📅")
+                                        ]),
+                                        this.state.showCalendar && React.createElement(CustomCalendar, {
+                                            key: "calendar",
+                                            selectedDate: this.state.editDate,
+                                            onDateSelect: this.handleDateSelect,
+                                            style: {
+                                                position: "absolute",
+                                                top: "100%",
+                                                left: "0",
+                                                zIndex: "999999",
+                                                backgroundColor: "#36393f",
+                                                border: "1px solid #4f545c",
+                                                borderRadius: "8px",
+                                                padding: "12px",
+                                                boxShadow: "0 8px 32px rgba(0, 0, 0, 0.8)",
+                                                marginTop: "4px"
+                                            }
+                                        })
+                                    ]),
+                                    React.createElement("div", {
+                                        key: "time-container",
+                                        style: { position: "relative" }
+                                    }, [
+                                        React.createElement("div", {
+                                            key: "custom-time-input",
+                                            style: {
+                                                width: "100%",
+                                                padding: "8px 12px",
+                                                backgroundColor: "#40444b",
+                                                border: this.state.showTimePicker ? "2px solid #5865f2" : "1px solid #4f545c",
+                                                borderRadius: "4px",
+                                                color: "#dcddde",
+                                                fontSize: "14px",
+                                                cursor: "pointer",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                boxSizing: "border-box"
+                                            },
+                                            onClick: this.handleTimeFieldClick
+                                        }, [
+                                            React.createElement("span", {
+                                                key: "time-text",
+                                                style: { fontSize: "12px" }
+                                            }, this.formatDisplayTime(this.state.editTime)),
+                                            React.createElement("span", {
+                                                key: "clock-icon",
+                                                style: {
+                                                    fontSize: '14px',
+                                                    color: '#5865f2',
+                                                    marginLeft: '8px'
+                                                }
+                                            }, "🕐")
+                                        ]),
+                                        this.state.showTimePicker && React.createElement(CustomTimePicker, {
+                                            key: "time-picker",
+                                            selectedTime: this.state.editTime,
+                                            onTimeSelect: this.handleTimeSelect,
+                                            className: "scheduled-list-timepicker",
+                                            style: {
+                                                minWidth: "350px",
+                                                width: "350px"
+                                            }
+                                        })
+                                    ])
+                                ]),
+                                React.createElement("div", {
+                                    key: "edit-buttons",
+                                    style: editButtonGroupStyle
+                                }, [
+                                    React.createElement("button", {
+                                        key: "cancel",
+                                        style: cancelButtonStyle,
+                                        onClick: this.handleCancelEdit
+                                    }, "Cancel"),
+                                    React.createElement("button", {
+                                        key: "save",
+                                        style: saveButtonStyle,
+                                        onClick: this.handleSaveEdit
+                                    }, "Save")
+                                ])
+                            ])
+                        ]);
+                    }))
+                )
             ])
         );
     }
@@ -1110,6 +1761,147 @@ function injectAnimationCSS() {
         
         #custom-modal-container .time-picker-container > div[style*="position: absolute"] {
             z-index: 99999 !important;
+        }
+        
+        .scheduled-messages-list [key="calendar"],
+        .scheduled-messages-list [key="time-picker"] {
+            z-index: 999999 !important;
+        }
+        
+        .scheduled-list-timepicker {
+            min-width: 350px !important;
+            width: 350px !important;
+            z-index: 999999 !important;
+        }
+        
+        .scheduled-list-timepicker > div:last-child > div:last-child {
+            max-height: 200px !important;
+            overflow-y: auto !important;
+            padding-right: 8px !important;
+        }
+        
+        .scheduled-messages-list button:hover {
+            transform: translateY(-2px) !important;
+            filter: brightness(1.1) !important;
+        }
+        
+        .scheduled-messages-list button:active {
+            transform: translateY(0) !important;
+            filter: brightness(0.9) !important;
+        }
+        
+        .scheduled-messages-list [key="date-container"],
+        .scheduled-messages-list [key="time-container"] {
+            overflow: visible !important;
+            position: relative !important;
+        }
+        
+        .scheduled-messages-list,
+        .scheduled-messages-list * {
+            overflow: visible !important;
+        }
+        
+        #scheduled-calendar-overlay,
+        #scheduled-timepicker-overlay {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 999999 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: rgba(0,0,0,0.5) !important;
+            pointer-events: auto !important;
+        }
+        
+        #scheduled-calendar-overlay > div,
+        #scheduled-timepicker-overlay > div {
+            background-color: #36393f !important;
+            border: 1px solid #4f545c !important;
+            border-radius: 8px !important;
+            padding: 25px !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8) !important;
+            position: relative !important;
+            z-index: 1000000 !important;
+        }
+        
+        #scheduled-calendar-overlay * {
+            color: #dcddde !important;
+        }
+        
+        #scheduled-timepicker-overlay * {
+            color: #dcddde !important;
+        }
+        
+        .scheduled-messages-list [key="calendar-wrapper"] [key="calendar"],
+        .scheduled-messages-list [key="timepicker-wrapper"] [key="time-picker"] {
+            background-color: #36393f !important;
+            border: 1px solid #4f545c !important;
+            border-radius: 8px !important;
+            padding: 16px !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+            min-width: 300px !important;
+            min-height: 300px !important;
+            opacity: 1 !important;
+            transform: none !important;
+            position: static !important;
+        }
+        
+        .scheduled-messages-list [key="timepicker-wrapper"] [key="time-picker"] {
+            min-width: 250px !important;
+            min-height: 200px !important;
+        }
+        
+        .scheduled-messages-list [key="calendar-wrapper"] *,
+        .scheduled-messages-list [key="timepicker-wrapper"] * {
+            opacity: 1 !important;
+            visibility: visible !important;
+        }
+        
+        .scheduled-messages-list [style*="position: fixed"],
+        .scheduled-messages-list [style*="position: fixed"] > *,
+        .scheduled-messages-list [style*="position: fixed"] > * > * {
+            position: fixed !important;
+            z-index: 999999 !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            margin: 0 !important;
+            width: auto !important;
+            height: auto !important;
+        }
+        
+        .scheduled-messages-list [key="calendar"],
+        .scheduled-messages-list [key="time-picker"] {
+            position: fixed !important;
+            z-index: 999999 !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            margin: 0 !important;
+        }
+        
+        .scheduled-messages-list [key="calendar"] *,
+        .scheduled-messages-list [key="time-picker"] * {
+            position: static !important;
+        }
+        
+        .scheduled-messages-list [data-calendar] > div[style*="position: absolute"] {
+            position: fixed !important;
+            z-index: 999999 !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+        }
+        
+        .scheduled-messages-list [data-timepicker] > div[style*="position: absolute"] {
+            position: fixed !important;
+            z-index: 999999 !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
         }
         
         #custom-modal-container *::-webkit-scrollbar {
@@ -1272,6 +2064,66 @@ function openCustomModal(channelId) {
     }
 }
 
+function openScheduledMessagesList() {
+    if (activeModal) {
+        return;
+    }
+    
+    injectAnimationCSS();
+    
+    const existingModal = document.getElementById("custom-modal-container");
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    if (reactRoot) {
+        try {
+            reactRoot.unmount();
+        } catch (e) {}
+        reactRoot = null;
+    }
+
+    const modalContainer = document.createElement("div");
+    modalContainer.id = "custom-modal-container";
+    document.body.appendChild(modalContainer);
+    activeModal = modalContainer;
+
+    const ReactDOM = BdApi.ReactDOM || BdApi.React;
+    const closeModal = () => {
+        try {
+            if (reactRoot) {
+                reactRoot.unmount();
+                reactRoot = null;
+            } else if (ReactDOM.unmountComponentAtNode) {
+                ReactDOM.unmountComponentAtNode(modalContainer);
+            }
+            if (modalContainer && modalContainer.parentNode) {
+                modalContainer.parentNode.removeChild(modalContainer);
+            }
+        } catch (e) {
+        }
+        activeModal = null;
+    };
+
+    try {
+        if (ReactDOM.createRoot) {
+            reactRoot = ReactDOM.createRoot(modalContainer);
+            reactRoot.render(
+                React.createElement(ScheduledMessagesList, { onClose: closeModal })
+            );
+        } else if (ReactDOM.render) {
+            ReactDOM.render(
+                React.createElement(ScheduledMessagesList, { onClose: closeModal }),
+                modalContainer
+            );
+        } else {
+            BdApi.UI.showToast("Error: React rendering not available", { type: "error" });
+        }
+    } catch (error) {
+        BdApi.UI.showToast("Error opening messages list", { type: "error" });
+    }
+}
+
 class ScheduledMessage {
     constructor() {
         this.checkMessages = this.checkMessages.bind(this);
@@ -1323,9 +2175,10 @@ class ScheduledMessage {
         text.textContent = `ScheduledMessage ${CURRENT_VERSION} → ${remoteVersion} available`;
 
         const btnDownload = document.createElement('a');
-        btnDownload.href = UPDATE_CHECK_URL;
+        btnDownload.href = DOWNLOAD_URL;
         btnDownload.target = "_blank";
         btnDownload.rel = "noreferrer";
+        btnDownload.download = "ScheduledMessage.plugin.js";
         btnDownload.textContent = "Download";
         btnDownload.style.cssText = `
             background:#5865f2;border:none;padding:6px 10px;border-radius:6px;
@@ -1489,16 +2342,45 @@ class ScheduledMessage {
             display: flex; align-items: center; justify-content: center;
             color: var(--interactive-normal); min-height: 44px; margin: 0 8px;
             border-radius: 4px; transition: all 0.2s;
+            position: relative;
         `;
+
+        const tooltip = document.createElement('div');
+        tooltip.style.cssText = `
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #18191c;
+            color: #dcddde;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 9999;
+            margin-bottom: 8px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s ease;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        `;
+        tooltip.textContent = 'Schedule a message';
+
+        button.appendChild(tooltip);
 
         button.addEventListener('mouseenter', () => {
             button.style.transform = 'scale(1.1)';
             button.style.color = 'var(--interactive-hover)';
+            tooltip.style.opacity = '1';
+            tooltip.style.visibility = 'visible';
         });
 
         button.addEventListener('mouseleave', () => {
             button.style.transform = 'scale(1)';
             button.style.color = 'var(--interactive-normal)';
+            tooltip.style.opacity = '0';
+            tooltip.style.visibility = 'hidden';
         });
 
         button.addEventListener('click', (e) => {
