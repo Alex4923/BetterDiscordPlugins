@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 3.0.0
+ * @version 3.0.1
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
@@ -16,7 +16,7 @@ const React = BdApi.React;
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/ScheduledMessage/ScheduledMessage.plugin.js";
 const DOWNLOAD_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/ScheduledMessage/ScheduledMessage.plugin.js";
 const RELEASES_URL = "https://github.com/Alex4923/BetterDiscordPlugins/releases";
-const CURRENT_VERSION = "3.0.0";
+const CURRENT_VERSION = "3.0.1";
 const UPDATE_BANNER_ID = "scheduled-message-updater-banner";
 
 const ScheduledMessagesStore = {
@@ -1718,11 +1718,17 @@ function injectAnimationCSS() {
         #scheduled-message-button {
             transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
         }
-        
+
+        #scheduled-message-button svg path {
+            fill: #b5bac1 !important;
+        }
+
         #scheduled-message-button:hover {
             transform: scale(1.15) !important;
-            color: #5865f2 !important;
-            filter: drop-shadow(0 0 8px rgba(88, 101, 242, 0.5));
+        }
+
+        #scheduled-message-button:hover svg path {
+            fill: #dbdee1 !important;
         }
         
         #custom-modal-container .field-container {
@@ -2336,11 +2342,11 @@ class ScheduledMessage {
 
         const button = document.createElement('button');
         button.id = 'scheduled-message-button';
-        button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 10.5h-4v-1h3V7h1v5.5z"/></svg>';
+        button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#b5bac1" d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 10.5h-4v-1h3V7h1v5.5z"/></svg>';
         button.style.cssText = `
             background: none; border: none; cursor: pointer; padding: 0;
             display: flex; align-items: center; justify-content: center;
-            color: var(--interactive-normal); min-height: 44px; margin: 0 8px;
+            min-height: 44px; margin: 0 8px;
             border-radius: 4px; transition: all 0.2s;
             position: relative;
         `;
@@ -2371,14 +2377,16 @@ class ScheduledMessage {
 
         button.addEventListener('mouseenter', () => {
             button.style.transform = 'scale(1.1)';
-            button.style.color = 'var(--interactive-hover)';
+            const path = button.querySelector('svg path');
+            if (path) path.setAttribute('fill', '#dbdee1');
             tooltip.style.opacity = '1';
             tooltip.style.visibility = 'visible';
         });
 
         button.addEventListener('mouseleave', () => {
             button.style.transform = 'scale(1)';
-            button.style.color = 'var(--interactive-normal)';
+            const path = button.querySelector('svg path');
+            if (path) path.setAttribute('fill', '#b5bac1');
             tooltip.style.opacity = '0';
             tooltip.style.visibility = 'hidden';
         });
@@ -2452,5 +2460,4 @@ class ScheduledMessage {
         this.removeUpdateBanner();
     }
 }
-
 module.exports = ScheduledMessage;
