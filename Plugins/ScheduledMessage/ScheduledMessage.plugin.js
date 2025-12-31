@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 3.0.1
+ * @version 3.0.2
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
