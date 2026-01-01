@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 3.0.2
+ * @version 3.0.3
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/tree/main/ScheduledMessage
@@ -16,7 +16,7 @@ const React = BdApi.React;
 const UPDATE_CHECK_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/Plugins/ScheduledMessage/ScheduledMessage.plugin.js";
 const DOWNLOAD_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/Plugins/ScheduledMessage/ScheduledMessage.plugin.js";
 const RELEASES_URL = "https://github.com/Alex4923/BetterDiscordPlugins/releases";
-const CURRENT_VERSION = "3.0.1";
+const CURRENT_VERSION = "3.0.3";
 const UPDATE_BANNER_ID = "scheduled-message-updater-banner";
 
 const ScheduledMessagesStore = {
