@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 3.1.1
+ * @version 3.1.2
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/blob/main/Plugins/ScheduledMessage
@@ -15,15 +15,15 @@
 const { React } = BdApi;
 
 const PLUGIN_CHANGELOG = {
-    version: "3.1.1",
-    changelogDate: "2026-04-29",
+    version: "3.1.2",
+    changelogDate: "2026-04-30",
     changelog: [
         {
-            title: "Initial Release",
-            type: "added",
+            title: "Some fixes and improvements",
+            type: "improved",
             items: [
-                "Update for the new Discord API and UI changes.",
-                "Fixed minor bugs.",
+                "Simplify module initialization and button injection logic.",
+                "Fixed bugs with message sending.",
             ]
         }
     ]
@@ -117,27 +117,21 @@ function initModules() {
             { searchExports: true }
         );
         mc = {
-            ModalRoot:        byDisplayName("ModalRoot")
-                              ?? BdApi.Webpack.getModule(m => {
-                                  try { const s = m?.toString?.(); return s?.includes("ENTERING") && s?.includes("headerId"); }
-                                  catch { return false; }
-                              }, { searchExports: true }),
-            ModalHeader:      byDisplayName("ModalHeader"),
-            ModalContent:     byDisplayName("ModalContent"),
-            ModalFooter:      byDisplayName("ModalFooter"),
-            ModalCloseButton: byDisplayName("ModalCloseButton"),
+            ModalRoot:    byDisplayName("ModalRoot")
+                          ?? BdApi.Webpack.getModule(m => {
+                              try { const s = m?.toString?.(); return s?.includes("ENTERING") && s?.includes("headerId"); }
+                              catch { return false; }
+                          }, { searchExports: true }),
+            ModalHeader:  byDisplayName("ModalHeader"),
+            ModalContent: byDisplayName("ModalContent"),
+            ModalFooter:  byDisplayName("ModalFooter"),
         };
     }
 
-    M.ModalRoot        = mc?.ModalRoot;
-    M.ModalHeader      = mc?.ModalHeader;
-    M.ModalContent     = mc?.ModalContent;
-    M.ModalFooter      = mc?.ModalFooter;
-    M.ModalCloseButton = mc?.ModalCloseButton
-        ?? BdApi.Webpack.getModule(
-            m => typeof m === "function" && m.displayName === "ModalCloseButton",
-            { searchExports: true }
-        );
+    M.ModalRoot    = mc?.ModalRoot;
+    M.ModalHeader  = mc?.ModalHeader;
+    M.ModalContent = mc?.ModalContent;
+    M.ModalFooter  = mc?.ModalFooter;
 
     const fc = BdApi.Webpack.getByKeys("FormTitle", "FormText");
     M.FormTitle = fc?.FormTitle;
@@ -154,31 +148,7 @@ function initModules() {
         : chatBtnRaw?.A
         ?? (chatBtnRaw && Object.values(chatBtnRaw).find(v => typeof v === "function"));
 
-    if (!M.ChatButton) {
-        try {
-            const el = document.querySelector('[class*="channelTextArea"] [class*="buttons"]');
-            const fk = el && Object.keys(el).find(k => k.startsWith("__reactFiber"));
-            if (fk) {
-                const q = [[el[fk], 0]];
-                const seen = new Set();
-                while (q.length) {
-                    const [f, d] = q.shift();
-                    if (!f || seen.has(f) || d > 30) continue;
-                    seen.add(f);
-                    if (typeof f.type === "function") {
-                        try {
-                            if (f.type.toString().includes("CHAT_INPUT_BUTTON_NOTIFICATION")) {
-                                M.ChatButton = f.type;
-                                break;
-                            }
-                        } catch {}
-                    }
-                    if (f.child) q.push([f.child, d + 1]);
-                    if (f.sibling) q.push([f.sibling, d + 1]);
-                }
-            }
-        } catch {}
-    }
+    M.MessageActions = BdApi.Webpack.getByKeys("sendMessage", "editMessage");
 }
 
 function openScheduleModal(channelId) {
@@ -550,14 +520,10 @@ class ScheduledMessage {
     }
 
     async sendMessage(channelId, message) {
-        const MessageActions = BdApi.Webpack.getModule(m => m?.sendMessage && m?.editMessage);
-        if (!MessageActions) {
+        if (!M.MessageActions) {
             BdApi.UI.showToast("Failed to get MessageActions", { type: "error" });
             return false;
         }
-
-        const NonceModule = BdApi.Webpack.getModule(m => (m?.v4 && m?.parse) || m?.uuidv4);
-        const nonce = NonceModule?.v4?.() || NonceModule?.uuidv4?.() || Date.now().toString();
 
         const payload = {
             content: message,
@@ -565,23 +531,15 @@ class ScheduledMessage {
             invalidEmojis: [],
             validNonShortcutEmojis: [],
             allowedMentions: { parse: [] },
-            nonce
+            nonce: Date.now().toString()
         };
 
         try {
-            await MessageActions.sendMessage(channelId, payload);
-        } catch (e1) {
-            try {
-                await MessageActions.sendMessage(channelId, payload, { nonce });
-            } catch (e2) {
-                try {
-                    await MessageActions.sendMessage(channelId, payload, undefined, { nonce });
-                } catch (e3) {
-                    console.error("[ScheduledMessage] sendMessage failed", e1, e2, e3);
-                    BdApi.UI.showToast("Failed to send message (Discord API changed)", { type: "error" });
-                    return false;
-                }
-            }
+            await M.MessageActions.sendMessage(channelId, payload, undefined, { nonce: payload.nonce });
+        } catch (e) {
+            console.error("[ScheduledMessage] sendMessage failed", e);
+            BdApi.UI.showToast("Failed to send message", { type: "error" });
+            return false;
         }
 
         BdApi.UI.showToast("Message sent successfully", { type: "success" });
