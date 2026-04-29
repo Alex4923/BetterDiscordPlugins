@@ -699,7 +699,7 @@ class ScheduledMessage {
 
     checkForUpdate() {
         const UPDATE_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/Plugins/ScheduledMessage/ScheduledMessage.plugin.js";
-        const CURRENT_VERSION = PLUGIN_CHANGELOG.version;
+        const PLUGIN_NAME = "ScheduledMessage";
 
         fetch(UPDATE_URL)
             .then(r => r.text())
@@ -710,7 +710,7 @@ class ScheduledMessage {
 
                 const parse = v => v.split(".").map(Number);
                 const [rMaj, rMin, rPat] = parse(remoteVersion);
-                const [lMaj, lMin, lPat] = parse(CURRENT_VERSION);
+                const [lMaj, lMin, lPat] = parse(PLUGIN_CHANGELOG.version);
 
                 const isNewer = rMaj > lMaj
                     || (rMaj === lMaj && rMin > lMin)
@@ -718,10 +718,18 @@ class ScheduledMessage {
 
                 if (!isNewer) return;
 
-                BdApi.UI.showToast(
-                    `ScheduledMessage v${remoteVersion} is available! Update the plugin in your BetterDiscord folder.`,
-                    { type: "info", timeout: 10000 }
-                );
+                const fs = require("fs");
+                const path = require("path");
+                const pluginPath = path.join(BdApi.Plugins.folder, `${PLUGIN_NAME}.plugin.js`);
+
+                fs.writeFile(pluginPath, text, err => {
+                    if (err) {
+                        BdApi.UI.showToast(`[${PLUGIN_NAME}] Update failed: ${err.message}`, { type: "error" });
+                        return;
+                    }
+                    BdApi.UI.showToast(`[${PLUGIN_NAME}] Updated to v${remoteVersion}! Reloading...`, { type: "success", timeout: 3000 });
+                    setTimeout(() => BdApi.Plugins.reload(PLUGIN_NAME), 1000);
+                });
             })
             .catch(() => {});
     }
