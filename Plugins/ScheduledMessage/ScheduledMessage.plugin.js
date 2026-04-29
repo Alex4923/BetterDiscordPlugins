@@ -19,7 +19,7 @@ const PLUGIN_CHANGELOG = {
     changelogDate: "2026-04-29",
     changelog: [
         {
-            title: "Lancement",
+            title: "Initial Release",
             type: "added",
             items: [
                 "Update for the new Discord API and UI changes.",
@@ -34,7 +34,7 @@ function showChangelog() {
     const saved = BdApi.Data.load("ScheduledMessage", "lastVersion");
     if (saved === version) return;
 
-    const formatter = new Intl.DateTimeFormat("fr-FR", { month: "long", day: "numeric", year: "numeric" });
+    const formatter = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" });
     const title = React.createElement("div", { className: "SM-Changelog-Title-Wrapper" },
         React.createElement("h1", null, "ScheduledMessage"),
         React.createElement("div", null, formatter.format(new Date(changelogDate)), " \u2014 v", version)
@@ -739,10 +739,40 @@ class ScheduledMessage {
         container.insertBefore(root, container.lastElementChild);
     }
 
+    checkForUpdate() {
+        const UPDATE_URL = "https://raw.githubusercontent.com/Alex4923/BetterDiscordPlugins/main/Plugins/ScheduledMessage/ScheduledMessage.plugin.js";
+        const CURRENT_VERSION = PLUGIN_CHANGELOG.version;
+
+        fetch(UPDATE_URL)
+            .then(r => r.text())
+            .then(text => {
+                const match = text.match(/@version\s+([^\s\r\n]+)/);
+                if (!match) return;
+                const remoteVersion = match[1].trim();
+
+                const parse = v => v.split(".").map(Number);
+                const [rMaj, rMin, rPat] = parse(remoteVersion);
+                const [lMaj, lMin, lPat] = parse(CURRENT_VERSION);
+
+                const isNewer = rMaj > lMaj
+                    || (rMaj === lMaj && rMin > lMin)
+                    || (rMaj === lMaj && rMin === lMin && rPat > lPat);
+
+                if (!isNewer) return;
+
+                BdApi.UI.showToast(
+                    `ScheduledMessage v${remoteVersion} is available! Update the plugin in your BetterDiscord folder.`,
+                    { type: "info", timeout: 10000 }
+                );
+            })
+            .catch(() => {});
+    }
+
     start() {
         BdApi.DOM.addStyle("ScheduledMessage", CSS);
         initModules();
         showChangelog();
+        this.checkForUpdate();
         this.checkInterval = setInterval(this.checkMessages, 1000);
         this.patchButton();
     }
