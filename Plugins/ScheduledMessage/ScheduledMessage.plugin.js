@@ -1,7 +1,7 @@
 /**
  * @name ScheduledMessage
  * @description Plugin to schedule message sending.
- * @version 3.1.1
+ * @version 3.1.2
  * @author Alexvo
  * @authorId 265931236885790721
  * @source https://github.com/Alex4923/BetterDiscordPlugins/blob/main/Plugins/ScheduledMessage
@@ -15,15 +15,15 @@
 const { React } = BdApi;
 
 const PLUGIN_CHANGELOG = {
-    version: "3.1.1",
-    changelogDate: "2026-04-29",
+    version: "3.1.2",
+    changelogDate: "2026-04-30",
     changelog: [
         {
-            title: "Initial Release",
-            type: "added",
+            title: "Some fixes and improvements",
+            type: "improved",
             items: [
-                "Update for the new Discord API and UI changes.",
-                "Fixed minor bugs.",
+                "Simplify module initialization and button injection logic.",
+                "Fixed bugs with message sending.",
             ]
         }
     ]
